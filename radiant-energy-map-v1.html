@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Radiant Energy Map</title>
+<style>
+
+/* =====================================================
+   SCOPED STYLES — all prefixed with #rem-app
+   Safe to embed in Squarespace without style conflicts
+===================================================== */
+
+#rem-app *,
+#rem-app *::before,
+#rem-app *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Root container ──────────────────────────────── */
+#rem-app {
+  position: relative;
+  width: 100%;
+  height: 85vh;            /* ← ADJUST HEIGHT for your layout */
+  min-height: 500px;
+  background: #06060f;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #b8c8e0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── SVG map ─────────────────────────────────────── */
+#rem-app svg#rem-map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  display: block;
+}
+#rem-app svg#rem-map:active { cursor: grabbing; }
+
+/* =====================================================
+   UI PANEL
+   ── These elements are intentionally separated so
+      you can replace them with custom graphics later.
+      Look for "UI ELEMENT" comments in the HTML too.
+===================================================== */
+
+#rem-app #rem-ui {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 20;
+  pointer-events: none;
+  white-space: nowrap;
+  width: max-content;
+  max-width: calc(100% - 32px);
+}
+
+/* ── Distance readout (UI ELEMENT) ── */
+#rem-app #rem-distance-value {
+  font-size: 30px;
+  font-weight: 200;
+  letter-spacing: 0.06em;
+  color: #90c8ff;
+  font-variant-numeric: tabular-nums;
+  min-height: 38px;
+  text-align: center;
+  transition: opacity 0.3s;
+}
+
+#rem-app #rem-distance-sub {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #405878;
+  text-align: center;
+  margin-top: 2px;
+  min-height: 14px;
+}
+
+/* ── Input card — holds both name and date rows (UI ELEMENT) ── */
+#rem-app #rem-input-card {
+  pointer-events: all;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(8, 12, 30, 0.85);
+  border: 1px solid rgba(80, 130, 220, 0.22);
+  border-radius: 8px;
+  padding: 12px 20px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+#rem-app .rem-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#rem-app .rem-input-row + .rem-input-row {
+  border-top: 1px solid rgba(80, 130, 220, 0.10);
+  padding-top: 8px;
+}
+
+#rem-app .rem-field-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #506888;
+  min-width: 36px;
+}
+
+#rem-app #rem-name-input {
+  background: transparent;
+  border: none;
+  color: #c0d8f8;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: text;
+  outline: none;
+  min-width: 180px;
+}
+
+#rem-app #rem-name-input::placeholder {
+  color: #304860;
+  font-style: italic;
+}
+
+/* ── Date dropdowns ── */
+#rem-app .rem-date-selects {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#rem-app .rem-sel {
+  background: transparent;
+  border: none;
+  color: #c0d8f8;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  color-scheme: dark;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 14px;
+  /* Custom caret */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23405878'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+}
+
+#rem-app .rem-sel option {
+  background: #0d1428;
+  color: #c0d8f8;
+}
+
+#rem-app .rem-sel-year { min-width: 62px; }
+#rem-app .rem-sel-month { min-width: 98px; }
+#rem-app .rem-sel-day { min-width: 42px; }
+
+#rem-app .rem-date-sep {
+  color: #304860;
+  font-size: 13px;
+  user-select: none;
+}
+
+/* ── Milestone message (UI ELEMENT) ── */
+#rem-app #rem-milestone {
+  font-size: 20px;
+  color: #5878a0;
+  letter-spacing: 0.04em;
+  text-align: center;
+  max-width: 480px;
+  white-space: normal;
+  line-height: 1.6;
+  min-height: 20px;
+}
+
+/* ── Zoom hint ── */
+#rem-app #rem-hint {
+  font-size: 10px;
+  color: rgba(60, 85, 120, 0.7);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* =====================================================
+   MAP ELEMENT STYLES
+===================================================== */
+
+#rem-app .rem-orbital-ring {
+  fill: none;
+}
+
+#rem-app .rem-landmark-label {
+  pointer-events: none;
+  dominant-baseline: middle;
+}
+
+/* Label color by type */
+#rem-app .rem-label-planet  { fill: #607898; }
+#rem-app .rem-label-star    { fill: #90aac8; }
+#rem-app .rem-label-region  { fill: #507080; }
+#rem-app .rem-label-cluster { fill: #8098c0; }
+#rem-app .rem-label-nebula  { fill: #9080b8; }
+#rem-app .rem-label-galactic { fill: #c8a840; }
+#rem-app .rem-label-galaxy  { fill: #b0a8e0; }
+#rem-app .rem-label-dwarf   { fill: #607080; }
+
+#rem-app .rem-wavefront-fill {
+  fill: rgba(255, 255, 255, 0.10);
+}
+
+#rem-app .rem-wavefront-ring {
+  fill: none;
+  stroke: #ffe066;
+}
+
+/* Screen-space glow — lives outside the zoom group so
+   the blur is always in screen pixels, not zoom-space */
+#rem-app #rem-wf-glow {
+  fill: none;
+  stroke: #ffe066;
+  pointer-events: none;
+}
+
+</style>
+</head>
+
+<body>
+
+<!-- =====================================================
+     ROOT CONTAINER — resize #rem-app height as needed
+===================================================== -->
+<div id="rem-app">
+
+  <!-- ================================================
+       SVG MAP
+  ================================================= -->
+  <svg id="rem-map">
+    <defs>
+
+      <!-- Wide screen-space glow filter.
+           filterUnits="userSpaceOnUse" + large fixed bounds means
+           the blur is always measured in screen pixels, not zoom-space,
+           so it stays wide and soft at any zoom level. -->
+      <filter id="rem-glow-wide"
+              filterUnits="userSpaceOnUse"
+              x="-2000" y="-2000" width="6000" height="6000">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="80" result="b1"/>
+        <feGaussianBlur in="SourceGraphic" stdDeviation="35" result="b2"/>
+        <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="b3"/>
+        <feMerge>
+          <feMergeNode in="b1"/>
+          <feMergeNode in="b2"/>
+          <feMergeNode in="b3"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+
+      <!-- Radial gradient for the wavefront fill.
+           gradientUnits="userSpaceOnUse" lets us set r in zoom-space
+           coords so it always matches the wavefront circle exactly. -->
+      <radialGradient id="rem-fill-grad" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="100">
+        <stop offset="0%"   stop-color="white" stop-opacity="0.18"/>
+        <stop offset="55%"  stop-color="white" stop-opacity="0.10"/>
+        <stop offset="100%" stop-color="white" stop-opacity="0"/>
+      </radialGradient>
+
+      <!-- Glow for the sun -->
+      <filter id="rem-glow-sun" x="-300%" y="-300%" width="700%" height="700%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+
+      <!-- Subtle glow for stars -->
+      <filter id="rem-glow-star" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+
+    </defs>
+
+    <!-- Background star field (fixed — does not zoom) -->
+    <g id="rem-starfield"></g>
+
+    <!-- Screen-space glow ring: stroke blurred into a wide soft halo.
+         Lives outside the zoom group so blur is always in screen pixels. -->
+    <circle id="rem-wf-glow" cx="0" cy="0" r="0" opacity="0"
+            stroke-width="8" filter="url(#rem-glow-wide)"/>
+
+    <!-- Zoomable map group — everything in light-year coordinate space -->
+    <g id="rem-map-group">
+
+      <!-- Wavefront fill — uses a radial gradient so it fades to transparent
+           at the edge, eliminating any sharp inner ring. -->
+      <circle id="rem-wf-fill" cx="0" cy="0" r="0" opacity="0"
+              fill="url(#rem-fill-grad)"/>
+
+      <!-- Orbital rings layer -->
+      <g id="rem-orbital-rings"></g>
+
+      <!-- Landmarks layer -->
+      <g id="rem-landmarks"></g>
+
+      <!-- Wavefront ring (rendered on top of landmarks) -->
+      <circle id="rem-wf-ring" class="rem-wavefront-ring" cx="0" cy="0" r="0" opacity="0"/>
+
+      <!-- Sun (always on top) -->
+      <!-- UI ELEMENT: replace these circles with a custom sun graphic if desired -->
+      <circle id="rem-sun-corona" cx="0" cy="0" r="0"
+              fill="rgba(255, 200, 50, 0.12)" filter="url(#rem-glow-sun)"/>
+      <circle id="rem-sun-core" cx="0" cy="0" r="0"
+              fill="#fff8d0" filter="url(#rem-glow-sun)"/>
+
+    </g>
+  </svg>
+
+  <!-- ================================================
+       UI PANEL
+       UI ELEMENT: This whole panel can be replaced
+       with a custom-designed overlay. The JS updates
+       these element IDs; keep the IDs or update the JS.
+  ================================================= -->
+  <div id="rem-ui">
+
+    <!-- Distance readout — UI ELEMENT -->
+    <div>
+      <div id="rem-distance-value">—</div>
+      <div id="rem-distance-sub">distance traveled</div>
+    </div>
+
+    <!-- Name + Date inputs — UI ELEMENT -->
+    <div id="rem-input-card">
+      <div class="rem-input-row">
+        <span class="rem-field-label">Name</span>
+        <input type="text" id="rem-name-input" placeholder="optional" autocomplete="off" spellcheck="false"/>
+      </div>
+      <div class="rem-input-row">
+        <span class="rem-field-label">Date</span>
+        <div class="rem-date-selects">
+          <select id="rem-sel-month" class="rem-sel rem-sel-month">
+            <option value="">Month</option>
+          </select>
+          <span class="rem-date-sep">/</span>
+          <select id="rem-sel-day" class="rem-sel rem-sel-day">
+            <option value="">Day</option>
+          </select>
+          <span class="rem-date-sep">/</span>
+          <select id="rem-sel-year" class="rem-sel rem-sel-year">
+            <option value="">Year</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Milestone message — UI ELEMENT -->
+    <div id="rem-milestone">Scroll or pinch to zoom &nbsp;·&nbsp; Drag to pan</div>
+
+    <div id="rem-hint">Mouse wheel · Touch pinch · Click &amp; drag</div>
+
+  </div>
+
+</div><!-- #rem-app -->
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(function() {
+'use strict';
+
+// =====================================================
+// CONFIG
+// Visual constants — adjust to taste.
+// =====================================================
+const CFG = {
+  BASE_SCALE:       800,   // pixels per light-year at zoom k=1
+  INITIAL_K:       4000,   // starting zoom (shows inner solar system)
+  WAVEFRONT_PX:     1.8,   // wavefront stroke width in screen pixels
+  ORBITAL_PX:       0.6,   // orbital ring stroke width in screen pixels
+  PLANET_R_PX:      3.2,   // planet dot radius in screen pixels
+  STAR_R_PX:        2.6,   // star dot radius in screen pixels
+  LANDMARK_R_PX:    2.0,   // other landmark dot radius
+  LABEL_PX:        10.5,   // label font size in screen pixels
+  SUN_CORE_PX:      5,     // sun core radius in screen pixels
+  SUN_CORONA_PX:   18,     // sun corona radius in screen pixels
+};
+
+// =====================================================
+// ASTRONOMICAL DATA
+// All distances in LIGHT-YEARS.
+// Angles place landmarks around the sun on the map.
+// =====================================================
+const LANDMARKS = [
+
+  // ── Solar System ─────────────────────────────────
+  { name: 'Mercury',  distance: 0.00000612, type: 'planet',  color: '#a8a8a8', angle: 0.30, orbit: true,  orbitAlpha: 0.20 },
+  { name: 'Venus',    distance: 0.0000114,  type: 'planet',  color: '#e8c890', angle: 1.10, orbit: true,  orbitAlpha: 0.18 },
+  { name: 'Earth',    distance: 0.0000158,  type: 'planet',  color: '#5090d0', angle: 2.00, orbit: true,  orbitAlpha: 0.20 },
+  { name: 'Mars',     distance: 0.0000241,  type: 'planet',  color: '#c06038', angle: 3.30, orbit: true,  orbitAlpha: 0.18 },
+  { name: 'Jupiter',  distance: 0.0000823,  type: 'planet',  color: '#c8a870', angle: 0.80, orbit: true,  orbitAlpha: 0.14 },
+  { name: 'Saturn',   distance: 0.000151,   type: 'planet',  color: '#e0d090', angle: 4.20, orbit: true,  orbitAlpha: 0.13 },
+  { name: 'Uranus',   distance: 0.000304,   type: 'planet',  color: '#70c8d0', angle: 1.80, orbit: true,  orbitAlpha: 0.12 },
+  { name: 'Neptune',  distance: 0.000476,   type: 'planet',  color: '#4060c0', angle: 5.10, orbit: true,  orbitAlpha: 0.12 },
+  { name: 'Pluto',    distance: 0.000639,   type: 'dwarf',   color: '#a08060', angle: 2.60, orbit: false, orbitAlpha: 0 },
+
+  // ── Boundaries ───────────────────────────────────
+  { name: 'Oort Cloud', distance: 1.0, type: 'region', color: '#507090', angle: 0, orbit: true, orbitAlpha: 0.07 },
+
+  // ── Nearby Stars ─────────────────────────────────
+  { name: 'Proxima Centauri',  distance: 4.243,  type: 'star', color: '#ff8858', angle: 3.90 },
+  { name: 'Alpha Centauri',    distance: 4.365,  type: 'star', color: '#fff088', angle: 4.05 },
+  { name: "Barnard's Star",    distance: 5.96,   type: 'star', color: '#ff7048', angle: 1.40 },
+  { name: 'Wolf 359',          distance: 7.78,   type: 'star', color: '#ff5030', angle: 2.20 },
+  { name: 'Sirius',            distance: 8.60,   type: 'star', color: '#c8e0ff', angle: 5.50 },
+  { name: 'Epsilon Eridani',   distance: 10.5,   type: 'star', color: '#ffb860', angle: 0.60 },
+  { name: 'Tau Ceti',          distance: 11.9,   type: 'star', color: '#ffe0a0', angle: 3.10 },
+  { name: 'Altair',            distance: 16.7,   type: 'star', color: '#d8ecff', angle: 2.80 },
+  { name: 'Vega',              distance: 25.0,   type: 'star', color: '#eef4ff', angle: 1.90 },
+  { name: 'Arcturus',          distance: 36.7,   type: 'star', color: '#ffb858', angle: 4.70 },
+  { name: 'Capella',           distance: 42.9,   type: 'star', color: '#ffe8a0', angle: 0.30 },
+  { name: 'Betelgeuse',        distance: 700,    type: 'star', color: '#ff8840', angle: 1.10 },
+  { name: 'Rigel',             distance: 860,    type: 'star', color: '#c8dcff', angle: 5.10 },
+
+  // ── Deep Sky ─────────────────────────────────────
+  { name: 'Pleiades',          distance: 444,      type: 'cluster',  color: '#90b0e8', angle: 3.60 },
+  { name: 'Orion Nebula',      distance: 1344,     type: 'nebula',   color: '#80a0e8', angle: 0.90 },
+  { name: 'Galactic Center',   distance: 26000,    type: 'galactic', color: '#ffe060', angle: 3.46 },
+  { name: 'Milky Way Edge',    distance: 50000,    type: 'galactic', color: '#c8a0e8', angle: 0.31 },
+  { name: 'Andromeda Galaxy',  distance: 2537000,  type: 'galaxy',   color: '#c0b8f8', angle: 2.40 },
+];
+
+// Pre-compute x, y positions in the scaled coordinate space
+LANDMARKS.forEach(l => {
+  const r = l.distance * CFG.BASE_SCALE;
+  l.x = Math.cos(l.angle) * r;
+  l.y = Math.sin(l.angle) * r;
+});
+
+// ── Milestone message ──────────────────────────────────────────────
+// Derived dynamically from the LANDMARKS array so text and map
+// are always in sync. Finds the last landmark passed and the next
+// one ahead, then picks the more relevant of the two to name.
+// UI ELEMENT: edit the phrase templates to match your tone.
+// ──────────────────────────────────────────────────────────────────
+
+// =====================================================
+// STATE
+// =====================================================
+let currentK  = CFG.INITIAL_K;
+let currentDist = 0; // light-years
+let currentTx = 0, currentTy = 0; // sun's screen position (tracks zoom)
+
+// =====================================================
+// DOM REFS
+// =====================================================
+const appEl        = document.getElementById('rem-app');
+const svgEl        = document.getElementById('rem-map');
+const mapGroup     = d3.select('#rem-map-group');
+const svg          = d3.select('#rem-map');
+
+let W = appEl.clientWidth  || 800;
+let H = appEl.clientHeight || 700;
+
+// =====================================================
+// ZOOM BEHAVIOR
+// =====================================================
+const zoomBehavior = d3.zoom()
+  .scaleExtent([1e-9, 1e9])
+  .on('zoom', onZoom);
+
+svg.call(zoomBehavior);
+
+// Prevent page scroll when wheeling over the map
+svgEl.addEventListener('wheel', e => e.preventDefault(), { passive: false });
+
+function onZoom(event) {
+  currentK  = event.transform.k;
+  currentTx = event.transform.x;
+  currentTy = event.transform.y;
+  mapGroup.attr('transform', event.transform);
+  updateScaleInvariant(currentK);
+  updateVisibility(currentK);
+  // Keep screen-space glow centered on sun
+  if (currentDist > 0) positionScreenGlow(currentDist);
+}
+
+// Place sun at viewport center on load
+currentTx = W / 2;
+currentTy = H / 2;
+svg.call(zoomBehavior.transform,
+  d3.zoomIdentity.translate(W / 2, H / 2).scale(CFG.INITIAL_K)
+);
+
+// =====================================================
+// BACKGROUND STAR FIELD (fixed; does not zoom)
+// UI ELEMENT: replace or augment with a custom image
+// =====================================================
+function buildStarField() {
+  const g = d3.select('#rem-starfield');
+  g.selectAll('*').remove();
+  // Deterministic pseudo-random for consistent appearance
+  let s = 20250515;
+  const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0xffffffff; };
+
+  for (let i = 0; i < 400; i++) {
+    const x    = rand() * W;
+    const y    = rand() * H;
+    const big  = rand() > 0.88;
+    const r    = big ? rand() * 1.2 + 0.7 : rand() * 0.7 + 0.15;
+    const op   = 0.12 + rand() * 0.75;
+    const blue = rand() > 0.72;
+    const fill = blue ? `rgba(160,192,255,${op.toFixed(2)})` : `rgba(255,255,255,${op.toFixed(2)})`;
+    g.append('circle').attr('cx', x).attr('cy', y).attr('r', r).attr('fill', fill);
+  }
+}
+buildStarField();
+
+// =====================================================
+// ORBITAL RINGS
+// =====================================================
+(function buildOrbitalRings() {
+  const g = d3.select('#rem-orbital-rings');
+  LANDMARKS.filter(l => l.orbit).forEach(l => {
+    const ring = g.append('circle')
+      .attr('class', 'rem-orbital-ring')
+      .attr('cx', 0).attr('cy', 0)
+      .attr('r', l.distance * CFG.BASE_SCALE)
+      .attr('stroke', l.color)
+      .attr('stroke-opacity', l.orbitAlpha)
+      .attr('stroke-width', CFG.ORBITAL_PX / CFG.INITIAL_K)
+      .attr('fill', 'none');
+    l._ring = ring;
+  });
+})();
+
+// =====================================================
+// LANDMARKS
+// Store D3 selections on each landmark object so we
+// can update them efficiently without re-querying.
+// =====================================================
+(function buildLandmarks() {
+  const g = d3.select('#rem-landmarks');
+
+  LANDMARKS.forEach(l => {
+    const grp = g.append('g')
+      .attr('transform', `translate(${l.x},${l.y})`);
+
+    // ── Dot ─────────────────────────────────────────
+    // UI ELEMENT: swap this circle for a custom SVG icon
+    // or <image> element positioned at the same location.
+    const dot = grp.append('circle')
+      .attr('cx', 0).attr('cy', 0)
+      .attr('r', dotR(l) / CFG.INITIAL_K)
+      .attr('fill', l.color)
+      .attr('opacity', 0.88);
+
+    if (l.type === 'star') dot.attr('filter', 'url(#rem-glow-star)');
+
+    // ── Label ────────────────────────────────────────
+    // UI ELEMENT: swap for a custom text style or badge.
+    const label = grp.append('text')
+      .attr('class', `rem-landmark-label rem-label-${l.type}`)
+      .attr('x', (CFG.LABEL_PX * 0.65) / CFG.INITIAL_K)
+      .attr('y', 0)
+      .attr('font-size', `${CFG.LABEL_PX / CFG.INITIAL_K}px`)
+      .text(l.name);
+
+    l._grp   = grp;
+    l._dot   = dot;
+    l._label = label;
+  });
+})();
+
+// Dot radius by type
+function dotR(l) {
+  if (l.type === 'star')   return CFG.STAR_R_PX;
+  if (l.type === 'planet') return CFG.PLANET_R_PX;
+  return CFG.LANDMARK_R_PX;
+}
+
+// =====================================================
+// SUN
+// UI ELEMENT: replace with a custom sun graphic
+// =====================================================
+d3.select('#rem-sun-corona').attr('r', CFG.SUN_CORONA_PX / CFG.INITIAL_K);
+d3.select('#rem-sun-core').attr('r', CFG.SUN_CORE_PX / CFG.INITIAL_K);
+
+// =====================================================
+// SCALE-INVARIANT UPDATES
+// Called on every zoom event to keep visual sizes
+// constant in screen pixels regardless of zoom level.
+// =====================================================
+function updateScaleInvariant(k) {
+  // Wavefront
+  d3.select('#rem-wf-ring').attr('stroke-width', CFG.WAVEFRONT_PX / k);
+
+  // Sun
+  d3.select('#rem-sun-core').attr('r', CFG.SUN_CORE_PX / k);
+  d3.select('#rem-sun-corona').attr('r', CFG.SUN_CORONA_PX / k);
+
+  // Orbital rings
+  LANDMARKS.filter(l => l._ring).forEach(l => {
+    l._ring.attr('stroke-width', CFG.ORBITAL_PX / k);
+  });
+
+  // Landmark dots and labels
+  LANDMARKS.forEach(l => {
+    if (!l._dot) return;
+    l._dot.attr('r', dotR(l) / k);
+    l._label
+      .attr('font-size', `${CFG.LABEL_PX / k}px`)
+      .attr('x', (CFG.LABEL_PX * 0.65) / k);
+  });
+}
+
+// =====================================================
+// LANDMARK VISIBILITY
+// Show/hide landmarks based on whether they'd appear
+// at a meaningful size on screen at the current zoom.
+// =====================================================
+function updateVisibility(k) {
+  const viewR = Math.min(W, H) / 2;
+
+  LANDMARKS.forEach(l => {
+    if (!l._grp) return;
+    const screenR = l.distance * CFG.BASE_SCALE * k;
+    // Show if it's at least 8px from center and within 4× the viewport radius
+    const visible = screenR > 8 && screenR < viewR * 5;
+    l._grp.attr('opacity', visible ? 1 : 0);
+  });
+
+  // Orbital rings: same logic
+  LANDMARKS.filter(l => l._ring).forEach(l => {
+    const screenR = l.distance * CFG.BASE_SCALE * k;
+    const visible = screenR > 5 && screenR < viewR * 5;
+    l._ring.attr('opacity', visible ? 1 : 0);
+  });
+}
+
+// =====================================================
+// WAVEFRONT
+// =====================================================
+
+// Positions the screen-space glow circle (in screen pixels)
+function positionScreenGlow(ly) {
+  const screenR = ly * CFG.BASE_SCALE * currentK;
+  d3.select('#rem-wf-glow')
+    .attr('cx', currentTx)
+    .attr('cy', currentTy)
+    .attr('r',  screenR)
+    .attr('opacity', 1);
+}
+
+function updateWavefront(ly) {
+  const r = ly * CFG.BASE_SCALE;
+
+  // Hide the gradient fill — just a thin ring + glow now
+  d3.select('#rem-wf-fill').attr('opacity', 0);
+
+  // Zoom-space thin ring (the crisp visible line)
+  d3.select('#rem-wf-ring')
+    .attr('r', r)
+    .attr('opacity', ly > 0 ? 1 : 0)
+    .attr('stroke-width', CFG.WAVEFRONT_PX / currentK);
+
+  // Screen-space glow (soft halo around the ring)
+  if (ly > 0) positionScreenGlow(ly);
+  else d3.select('#rem-wf-glow').attr('opacity', 0);
+}
+
+// =====================================================
+// DISTANCE CALCULATIONS
+// =====================================================
+const SECS_PER_YEAR = 365.25 * 24 * 3600;
+
+function lyFromDate(dateOrStr) {
+  const ms = Date.now() - new Date(dateOrStr).getTime();
+  if (ms <= 0) return 0;
+  return (ms / 1000) / SECS_PER_YEAR; // 1 light-year per year
+}
+
+function formatLY(ly) {
+  if (ly <= 0) return '—';
+  const lightSecs = ly * SECS_PER_YEAR;
+  if (ly < 1 / 8766)   return `${lightSecs.toFixed(0)} light-seconds`;
+  const lightHrs = ly * 8766;
+  if (ly < 1 / 365.25) return `${lightHrs.toFixed(1)} light-hours`;
+  const lightDays = ly * 365.25;
+  if (ly < 1)          return `${lightDays.toFixed(1)} light-days`;
+  if (ly < 1000)       return `${ly.toFixed(2)} light-years`;
+  if (ly < 1e6)        return `${(ly / 1000).toFixed(1)}K light-years`;
+  return `${(ly / 1e6).toFixed(2)}M light-years`;
+}
+
+function getMilestone(ly, name) {
+  if (ly <= 0) return 'Scroll or pinch to zoom · Drag to pan';
+
+  const s = name ? `${name}'s energy` : 'Their energy';
+
+  // Sort all landmarks by distance and find the two that bracket
+  // the current wavefront — same data the map uses, so always in sync.
+  const refs = [...LANDMARKS].sort((a, b) => a.distance - b.distance);
+  const passed = refs.filter(l => l.distance <= ly);
+  const ahead  = refs.filter(l => l.distance >  ly);
+  const last   = passed[passed.length - 1];
+  const next   = ahead[0];
+
+  // Before the first landmark
+  if (!last) {
+    return next
+      ? `${s} is currently approaching ${next.name}.`
+      : `${s} is currently traveling through deep space.`;
+  }
+
+  // Beyond the last landmark on the map
+  if (!next) {
+    return `${s} is currently beyond ${last.name}.`;
+  }
+
+  // How far through the gap between the two bracketing landmarks?
+  // frac near 0 = just passed `last`; frac near 1 = almost at `next`.
+  const frac = (ly - last.distance) / (next.distance - last.distance);
+
+  if (frac < 0.5) {
+    return `${s} is currently passing ${last.name}.`;
+  } else {
+    return `${s} is currently approaching ${next.name}.`;
+  }
+}
+
+// =====================================================
+// AUTO-ZOOM
+// Transitions the view so the wavefront ring fills
+// ~38% of the viewport. User can then zoom manually.
+// =====================================================
+function zoomToDistance(ly) {
+  if (ly <= 0) return;
+  const targetPx = Math.min(W, H) * 0.38;
+  const ringPx   = ly * CFG.BASE_SCALE;
+  const k        = targetPx / ringPx;
+  svg.transition().duration(750).ease(d3.easeCubicInOut)
+    .call(zoomBehavior.transform,
+      d3.zoomIdentity.translate(W / 2, H / 2).scale(k)
+    );
+}
+
+// =====================================================
+// INPUTS — name + three-part date dropdowns
+// =====================================================
+const nameInput  = document.getElementById('rem-name-input');
+const selMonth   = document.getElementById('rem-sel-month');
+const selDay     = document.getElementById('rem-sel-day');
+const selYear    = document.getElementById('rem-sel-year');
+
+const MONTHS = ['January','February','March','April','May','June',
+                'July','August','September','October','November','December'];
+
+// Populate month options
+MONTHS.forEach((m, i) => {
+  const o = document.createElement('option');
+  o.value = i; o.textContent = m;
+  selMonth.appendChild(o);
+});
+
+// Populate year options: current year → 1900
+const thisYear = new Date().getFullYear();
+for (let y = thisYear; y >= 1900; y--) {
+  const o = document.createElement('option');
+  o.value = y; o.textContent = y;
+  selYear.appendChild(o);
+}
+
+// Populate (or repopulate) day options based on current month/year selection
+function refreshDays() {
+  const y = +selYear.value || thisYear;
+  const m = selMonth.value !== '' ? +selMonth.value : 0;
+  const maxDay = new Date(y, m + 1, 0).getDate(); // last day of that month
+  const prevDay = +selDay.value;
+
+  selDay.innerHTML = '<option value="">Day</option>';
+  for (let d = 1; d <= maxDay; d++) {
+    const o = document.createElement('option');
+    o.value = d; o.textContent = d;
+    if (d === prevDay) o.selected = true;
+    selDay.appendChild(o);
+  }
+}
+refreshDays();
+
+// Called whenever any dropdown changes
+function onDateChange() {
+  refreshDays();
+  const y = selYear.value, m = selMonth.value, d = selDay.value;
+  if (y === '' || m === '' || d === '') return; // not fully set yet
+
+  const date = new Date(+y, +m, +d);
+  if (date > new Date()) return; // future date — ignore
+
+  currentDist = lyFromDate(date);
+  updateWavefront(currentDist);
+  refreshDisplay();
+  zoomToDistance(currentDist);
+}
+
+selMonth.addEventListener('change', onDateChange);
+selDay.addEventListener('change', onDateChange);
+selYear.addEventListener('change', onDateChange);
+
+function refreshDisplay() {
+  const ly   = currentDist;
+  const name = nameInput.value.trim();
+  document.getElementById('rem-distance-value').textContent = formatLY(ly);
+  document.getElementById('rem-distance-sub').textContent   = ly > 0 ? 'distance traveled' : '';
+  document.getElementById('rem-milestone').textContent      = getMilestone(ly, name);
+}
+
+// Re-render the milestone sentence whenever the name changes
+nameInput.addEventListener('input', refreshDisplay);
+
+// =====================================================
+// RESIZE — re-center sun, refill star field
+// =====================================================
+const resizeObserver = new ResizeObserver(() => {
+  const prevW = W, prevH = H;
+  W = appEl.clientWidth;
+  H = appEl.clientHeight;
+  if (W === prevW && H === prevH) return;
+
+  // Rebuild star field to cover the new dimensions
+  buildStarField();
+
+  // Re-center: keep zoom scale, shift sun back to viewport center
+  if (currentDist > 0) {
+    zoomToDistance(currentDist);
+  } else {
+    currentTx = W / 2; currentTy = H / 2;
+    svg.call(zoomBehavior.transform,
+      d3.zoomIdentity.translate(W / 2, H / 2).scale(currentK)
+    );
+  }
+});
+resizeObserver.observe(appEl);
+
+})(); // end IIFE
+</script>
+
+</body>
+</html>
