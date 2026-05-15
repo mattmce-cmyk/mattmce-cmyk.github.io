@@ -376,9 +376,9 @@
     </div>
 
     <!-- Milestone message — UI ELEMENT -->
-    <div id="rem-milestone">Scroll or pinch to zoom &nbsp;·&nbsp; Drag to pan</div>
+    <div id="rem-milestone">Enter a date above to begin.</div>
 
-    <div id="rem-hint">Mouse wheel · Touch pinch · Click &amp; drag</div>
+    <div id="rem-hint">Click &amp; drag to pan</div>
 
   </div>
 
@@ -488,12 +488,10 @@ let H = appEl.clientHeight || 700;
 // =====================================================
 const zoomBehavior = d3.zoom()
   .scaleExtent([1e-9, 1e9])
+  .filter(event => event.type !== 'wheel') // scroll wheel pans the page, not the map
   .on('zoom', onZoom);
 
 svg.call(zoomBehavior);
-
-// Prevent page scroll when wheeling over the map
-svgEl.addEventListener('wheel', e => e.preventDefault(), { passive: false });
 
 function onZoom(event) {
   currentK  = event.transform.k;
@@ -715,7 +713,7 @@ function formatLY(ly) {
 }
 
 function getMilestone(ly, name) {
-  if (ly <= 0) return 'Scroll or pinch to zoom · Drag to pan';
+  if (ly <= 0) return 'Enter a date above to begin.';
 
   const s = name ? `${name}'s energy` : 'Their energy';
 
